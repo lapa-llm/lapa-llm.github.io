@@ -215,7 +215,7 @@ export const leaderboard = {
     en: 'An open leaderboard that compares language models on Ukrainian benchmarks, the same ones we used while developing Lapa.',
   },
   categories: [
-    { uk: 'Справедливість', en: 'Fairness' },
+    { uk: 'Fairness', en: 'Fairness' },
     { uk: 'Машинний переклад', en: 'Machine translation' },
     { uk: 'Сумаризація', en: 'Summarization' },
     { uk: 'Відповіді на запитання за контекстом', en: 'In-context question answering' },
