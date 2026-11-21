@@ -299,14 +299,15 @@ export const bibtex = `@inproceedings{paniv-etal-2026-data,
 export const snippets: { id: string; label: string; lang: string; code: string }[] = [
   {
     id: 'transformers', label: 'Transformers', lang: 'python',
-    code: `import torch
+    code: `# pip install -U transformers accelerate
+import torch
 from transformers import pipeline
 
 pipe = pipeline(
     "image-text-to-text",
     model="lapa-llm/lapa-v0.1.3-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 
 messages = [{"role": "user", "content": [
