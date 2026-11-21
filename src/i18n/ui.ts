@@ -140,7 +140,7 @@ const uk = {
     teamTitle: 'Команда',
     teamNote: 'Люди, які створили Lapa, і ті, хто приєднався згодом.',
     mapTitle: 'Звідки ми',
-    teamPast: 'Раніше в команді',
+    teamPast: 'Lapa Alumni',
     contactTitle: 'Контакти',
   },
   footer: {
@@ -280,7 +280,7 @@ const en: Dict = {
     teamTitle: 'Team',
     teamNote: 'The people who built Lapa and those who joined later.',
     mapTitle: 'Where we are',
-    teamPast: 'Past contributor',
+    teamPast: 'Lapa Alumni',
     contactTitle: 'Contact',
   },
   footer: {
