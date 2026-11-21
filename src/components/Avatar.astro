@@ -1,0 +1,35 @@
+---
+// Team avatar: the photo if there is one, otherwise a tiny static loss landscape (seeded by the name) with initials.
+import { makeField, contourPaths } from '../lib/contours';
+
+/** `name` gives the initials (in the page language); `seedKey` keeps the same landscape across languages */
+interface Props { name: string; seedKey?: string; photo?: string; class?: string }
+const { name, seedKey = name, photo, class: cls = '' } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+
+const seed = [...seedKey].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 9973, 7);
+const r = (k: number) => ((seed * (k + 3) * 2654435761) % 1000) / 1000;
+const W = 96;
+const paths = photo ? [] : contourPaths(
+  makeField({ w: W, h: W, seed, mx: 0.3 + r(1) * 0.4, my: 0.3 + r(2) * 0.4, view: [0.1, 0.9, 0.1, 0.9] }), W, W, 3, 0,
+);
+const initials = name.split(/[\s-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('');
+---
+<div class:list={['avatar relative shrink-0 overflow-hidden rounded-full border border-line bg-bg', cls]}>
+  {photo ? (
+    <img src={base + photo} alt="" loading="lazy" decoding="async" class="h-full w-full object-cover" />
+  ) : (
+    <>
+      <svg viewBox={`0 0 ${W} ${W}`} class="absolute inset-0 h-full w-full" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+          {paths.map((d, i) => <path d={d} stroke-opacity={(0.18 + 0.5 * (1 - i / paths.length)).toFixed(2)} vector-effect="non-scaling-stroke" />)}
+        </g>
+      </svg>
+      <span class="knockout relative grid h-full w-full place-items-center font-mono text-base font-medium text-fg" aria-hidden="true">{initials}</span>
+    </>
+  )}
+</div>
+
+<style>
+  .avatar { color: var(--contour); }
+</style>

@@ -1,0 +1,92 @@
+---
+// Paper page: MATT — Model-Aware Tokenizer Transfer (Mykola Haltiuk, Aleksander Smywiński-Pohl; NeurIPS 2026).
+import Base from '../../layouts/Base.astro';
+import PageHeader from '../PageHeader.astro';
+import SectionTitle from '../SectionTitle.astro';
+import CopyButton from '../CopyButton.astro';
+import Ext from '../Ext.astro';
+import { ui, href, type Lang } from '../../i18n/ui';
+import { matt, mattBibtex } from '../../data/site';
+
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = ui[lang];
+const r = t.research;
+---
+<Base lang={lang} page="research" slug="research/matt" title="MATT">
+  <PageHeader title={matt.title} eyebrow={matt.label[lang]} meta={matt.authors} back={{ href: href(lang, 'research'), label: r.back }} seed={47}>
+    <a href={matt.arxiv} class="inline-flex items-center gap-2 rounded-xl btn-primary px-4 py-2.5 text-sm font-medium">arXiv <Ext /></a>
+    <a href={matt.code} class="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-medium hover:border-accent">{t.cta.github} <Ext /></a>
+  </PageHeader>
+
+  <section class="container-x">
+    <SectionTitle index="01" title={r.mattDetailsTitle} />
+    <div class="grid gap-10 lg:grid-cols-[1.1fr_1fr]">
+      <p class="text-lg leading-relaxed">{matt.summary[lang]}</p>
+      <ol class="space-y-0 border-t border-line">
+        {matt.steps.map((s, i) => (
+          <li class="flex gap-4 border-b border-line py-4 leading-relaxed">
+            <span class="font-mono text-xs text-accent pt-1">{String(i + 1).padStart(2, '0')}</span>
+            <span>{s[lang]}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+    <p class="mt-8 max-w-3xl rounded-xl bg-sunken p-4 text-sm leading-relaxed">{matt.setup[lang]}</p>
+  </section>
+
+  <section class="container-x mt-24">
+    <SectionTitle index="02" title={r.resultsTitle} />
+    <div class="grid gap-10 lg:grid-cols-2">
+      <div class="min-w-0">
+        <h3 class="font-medium">{matt.labels[lang].title}</h3>
+        <div class="mt-2 flex gap-4 text-xs text-muted">
+          <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-accent"></span>{matt.labels[lang].matt}</span>
+          <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-muted/50"></span>{matt.labels[lang].ntp}</span>
+        </div>
+        <div class="mt-5 space-y-6">
+          {matt.recovery.map((g) => (
+            <div>
+              <p class="mb-2 text-sm font-medium">{g.label[lang]}</p>
+              <div class="space-y-1.5">
+                <div class="flex items-center gap-3">
+                  <div class="h-3.5 flex-1 rounded-full bg-sunken"><div class="h-3.5 rounded-full bg-accent" style={`width:${g.matt}%`}></div></div>
+                  <span class="w-10 text-right text-sm font-medium tabular-nums">{g.matt}%</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="h-3.5 flex-1 rounded-full bg-sunken"><div class="h-3.5 rounded-full bg-muted/50" style={`width:${g.ntp}%`}></div></div>
+                  <span class="w-10 text-right text-sm text-muted tabular-nums">{g.ntp}%</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div class="min-w-0">
+        <div class="overflow-x-auto rounded-xl border border-line">
+          <table class="w-full text-sm">
+            <thead class="bg-sunken text-muted">
+              <tr>{matt.table.head[lang].map((h, i) => <th class:list={['px-3 py-2 font-medium', i === 0 ? 'text-left' : 'text-right']}>{h}</th>)}</tr>
+            </thead>
+            <tbody class="divide-y divide-line">
+              {matt.table.rows.map((row) => (
+                <tr class:list={[row[0] === 'MATT' && 'font-medium text-accent']}>
+                  {row.map((c, i) => <td class:list={['px-3 py-2', i === 0 ? 'text-left' : 'text-right tabular-nums']}>{c}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-3 text-xs text-muted leading-relaxed">{matt.note[lang]}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="container-x mt-24">
+    <SectionTitle index="03" title={r.citeTitle} />
+    <div class="code-block relative">
+      <div class="absolute right-3 top-3"><CopyButton target="bibtex-matt" label={t.cta.copy} done={t.cta.copied} /></div>
+      <pre class="p-5 pr-24"><code id="bibtex-matt">{mattBibtex}</code></pre>
+    </div>
+  </section>
+</Base>

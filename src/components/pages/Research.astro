@@ -1,0 +1,72 @@
+---
+// Research index: one card per paper (each links to its own page), plus the Ukrainian LLM Leaderboard.
+import Base from '../../layouts/Base.astro';
+import PageHeader from '../PageHeader.astro';
+import { ui, href, type Lang } from '../../i18n/ui';
+import { matt, leaderboard } from '../../data/site';
+import Ext from '../Ext.astro';
+
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = ui[lang];
+const r = t.research;
+const cards = [
+  { href: href(lang, 'research/lapa'), label: r.paperLabel, title: r.paperTitle, authors: r.paperAuthors, short: r.lapaShort, keys: r.lapaKeys },
+  { href: href(lang, 'research/matt'), label: matt.label[lang], title: matt.title, authors: matt.authors, short: matt.short[lang], keys: r.mattKeys },
+];
+---
+<Base lang={lang} page="research" title={t.nav.research}>
+  <PageHeader title={r.title} lead={r.lead} />
+
+  <section class="container-x">
+    <h2 class="sr-only">{r.papersTitle}</h2>
+    <div class="grid gap-4 lg:grid-cols-2">
+      {cards.map((c, i) => (
+        <a href={c.href} class="card group flex flex-col p-6 sm:p-8">
+          <div class="flex items-baseline justify-between gap-4">
+            <p class="eyebrow">{c.label}</p>
+            <span class="font-mono text-xs text-muted">{String(i + 1).padStart(2, '0')}</span>
+          </div>
+          <h3 class="mt-4 text-xl sm:text-2xl font-medium tracking-tight group-hover:text-accent transition-colors">{c.title}</h3>
+          <p class="mt-2 text-sm text-muted">{c.authors}</p>
+          <p class="mt-5 flex-1 leading-relaxed">{c.short}</p>
+          <dl class="mt-7 grid grid-cols-2 gap-6 border-t border-line pt-5">
+            {c.keys.map(([v, l]) => (
+              <div>
+                <dt class="sr-only">{l}</dt>
+                <dd class="font-[family-name:var(--font-display)] text-3xl font-light tabular-nums">{v}</dd>
+                <dd class="mt-1 text-sm text-muted leading-snug">{l}</dd>
+              </div>
+            ))}
+          </dl>
+          <span class="mt-7 font-mono text-xs text-accent">{r.read} <span class="inline-block transition-transform group-hover:translate-x-1">→</span></span>
+        </a>
+      ))}
+    </div>
+
+    <!-- Leaderboard: where the models are compared -->
+    <article class="card mt-4 grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_1.1fr]">
+      <div class="flex flex-col">
+        <div class="flex items-baseline justify-between gap-4">
+          <p class="eyebrow">{r.lbTitle} · {leaderboard.by}</p>
+          <span class="font-mono text-xs text-muted">03</span>
+        </div>
+        <h3 class="mt-4 text-xl sm:text-2xl font-medium tracking-tight">{leaderboard.title}</h3>
+        <p class="mt-4 flex-1 leading-relaxed">{leaderboard.desc[lang]}</p>
+        <div class="mt-7 flex flex-wrap gap-3">
+          <a href={leaderboard.url} class="inline-flex items-center gap-2 rounded-xl btn-primary px-4 py-2.5 text-sm font-medium">{r.lbOpen} <Ext /></a>
+          <a href={leaderboard.results} class="inline-flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-sm font-medium hover:border-accent">{r.lbResults} <Ext /></a>
+          <a href={leaderboard.code} class="inline-flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-sm font-medium hover:border-accent">{t.cta.github} <Ext /></a>
+        </div>
+      </div>
+      <ol class="border-t border-line lg:border-t-0">
+        {leaderboard.categories.map((c, i) => (
+          <li class="flex items-baseline gap-4 border-b border-line py-3 lg:first:border-t">
+            <span class="font-mono text-xs text-muted">{String(i + 1).padStart(2, '0')}</span>
+            <span>{c[lang]}</span>
+          </li>
+        ))}
+      </ol>
+    </article>
+  </section>
+</Base>

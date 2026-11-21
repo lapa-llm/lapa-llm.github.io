@@ -1,0 +1,73 @@
+---
+// One team member. A card with a bio opens on click anywhere on it (a native <details>; the summary
+// works by keyboard and without JS, the small script below makes the rest of the card clickable too).
+import Avatar from './Avatar.astro';
+import { orgs, type Person } from '../data/site';
+import type { Lang } from '../i18n/ui';
+
+interface Props { p: Person; lang: Lang; pastLabel: string }
+const { p, lang, pastLabel } = Astro.props;
+
+const Wrap = p.bio ? 'details' : 'div';
+const Head = p.bio ? 'summary' : 'div';
+const links = [
+  p.hf && { label: 'HF', title: 'Hugging Face', url: `https://huggingface.co/${p.hf}` },
+  p.github && { label: 'GH', title: 'GitHub', url: `https://github.com/${p.github}` },
+  p.scholar && { label: 'Scholar', title: 'Google Scholar', url: p.scholar },
+  p.orcid && { label: 'ORCID', title: 'ORCID', url: `https://orcid.org/${p.orcid}` },
+  p.linkedin && { label: 'in', title: 'LinkedIn', url: p.linkedin },
+  p.site && { label: 'Web', title: 'Website', url: p.site },
+].filter((l): l is { label: string; title: string; url: string } => !!l);
+---
+<li class:list={['card flex min-w-0 flex-col p-5 sm:p-6', p.bio && 'team-card cursor-pointer']}>
+  <Wrap class="flex-1">
+    <Head class:list={['block', p.bio && 'list-none rounded-lg outline-offset-4 focus-visible:outline-2 focus-visible:outline-accent']}>
+      <div class:list={['flex gap-4', p.org && typeof p.org !== 'string' ? 'items-start' : 'items-center']}>
+        <Avatar name={p.name[lang]} seedKey={p.name.en} photo={p.photo} class="h-16 w-16" />
+        <div class="min-w-0">
+          <p class="text-lg font-medium leading-tight [overflow-wrap:anywhere]">{p.name[lang]}</p>
+          {p.org && <p class="mt-1 font-mono text-xs leading-snug text-muted">{typeof p.org === 'string' ? orgs[p.org][lang] : p.org[lang]}</p>}
+          {p.past && <p class="mt-2 inline-block rounded-full border border-line px-2 py-0.5 font-mono text-[11px] leading-none text-muted">{pastLabel}</p>}
+        </div>
+      </div>
+      {p.role && <p class="mt-4 leading-snug text-muted">{p.role[lang]}</p>}
+    </Head>
+    {p.bio && <p class="mt-4 border-t border-line pt-4 text-sm leading-relaxed">{p.bio[lang]}</p>}
+  </Wrap>
+  {links.length > 0 && (
+    <div class="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-3 font-mono text-xs">
+      {links.map((l) => (
+        <a class="text-muted hover:text-accent" href={l.url} title={l.title} aria-label={`${p.name[lang]}: ${l.title}`}>{l.label}</a>
+      ))}
+    </div>
+  )}
+</li>
+
+<script>
+  // A click anywhere on the card opens or closes it. Links inside just work as links.
+  document.querySelectorAll<HTMLElement>('.team-card').forEach((card) => {
+    const d = card.querySelector('details');
+    if (!d) return;
+    card.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('a') || getSelection()?.toString()) return;
+      e.preventDefault(); // the summary would toggle on its own; handle it here instead
+      d.open = !d.open;
+    });
+  });
+</script>
+
+<style>
+  summary::-webkit-details-marker { display: none; }
+  .team-card { transition: border-color 0.2s ease; }
+  .team-card:hover, .team-card:has(details[open]) { border-color: var(--accent); }
+  /* Smooth open where supported (progressive: elsewhere it just opens). */
+  @supports (interpolate-size: allow-keywords) {
+    details { interpolate-size: allow-keywords; }
+    details::details-content { block-size: 0; overflow: clip; transition: block-size 0.25s ease, content-visibility 0.25s allow-discrete; }
+    details[open]::details-content { block-size: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .team-card, details::details-content { transition: none; }
+  }
+</style>

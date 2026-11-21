@@ -1,0 +1,375 @@
+---
+// Animated loss landscape: organic contours, optimizer runs (SGD + momentum) with a live loss readout,
+// topographic value labels, and a cursor that raises a hill. Click empty space to start a new run.
+import { makeField, contourPaths, levelPoint } from '../lib/contours';
+
+interface Props {
+  seed?: number;
+  w?: number;
+  h?: number;
+  /** global minimum position (fractions) */
+  mx?: number;
+  my?: number;
+  /** part of the field actually on screen, [x0, x1, y0, y1] fractions; runs start inside it */
+  view?: [number, number, number, number];
+  walkers?: number;
+  labels?: boolean;
+  interactive?: boolean;
+  fade?: 'left' | 'radial' | 'none';
+  /** New random terrain on every page load (the server-rendered frame is a fallback). */
+  random?: boolean;
+  /** Experimental lava-lamp motion: blobs rise, sink, drift and swell. */
+  lava?: boolean;
+  /** where a random minimum may land [x0, x1, y0, y1], and a box it must avoid (e.g. behind text) */
+  minBox?: [number, number, number, number];
+  avoid?: [number, number, number, number];
+  class?: string;
+}
+const {
+  seed = 7, w = 1200, h = 600, mx = 0.62, my = 0.55, view = [0.05, 0.95, 0.05, 0.95],
+  walkers = 1, labels = true, interactive = true, fade = 'none', class: cls = '',
+  random = false, minBox, avoid, lava = false,
+} = Astro.props;
+
+const field = makeField({ w, h, seed, mx, my, view, lava });
+const paths = contourPaths(field, w, h, 14, 0);
+const n = paths.length;
+const opacity = (i: number) => Math.min(0.95, 0.28 + 0.62 * Math.abs(i / (n - 1) - 0.42) * 1.7).toFixed(2); // bright valley floors and summits
+
+const LABEL_LEVELS = [2, 5, 8, 11];
+const LABEL_ANGLES = [-0.3, 3.44, -1.0, 4.14]; // right, left, upper-right, upper-left: away from text below
+const S = Math.min(w, h * 1.6);
+const labelPts = labels
+  ? LABEL_LEVELS.map((li, k) => {
+      const pt = levelPoint(field, field.levels[li], LABEL_ANGLES[k], 0, S * 0.95);
+      return { pt, text: field.loss(field.levels[li]).toFixed(1) };
+    })
+  : [];
+const cfg = JSON.stringify({ seed, w, h, mx, my, view, walkers, labels, interactive, LABEL_LEVELS, LABEL_ANGLES, random, minBox, avoid, lava });
+---
+<svg
+  class:list={['loss-field pointer-events-none', `lf-fade-${fade}`, random && 'lf-random', cls]}
+  viewBox={`0 0 ${w} ${h}`}
+  preserveAspectRatio="xMidYMid slice"
+  aria-hidden="true"
+  data-loss={cfg}
+>
+  <g class="lf-levels" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
+    {paths.map((d, i) => <path d={d} stroke-opacity={opacity(i)} vector-effect="non-scaling-stroke" />)}
+  </g>
+
+
+  <g class="lf-labels" font-family="var(--font-mono)" font-size="12" fill="var(--muted)" stroke="var(--bg)" stroke-width="5" paint-order="stroke" text-anchor="middle">
+    {labelPts.map(({ pt, text }) => <text x={pt ? pt[0].toFixed(1) : -99} y={pt ? (pt[1] + 4).toFixed(1) : -99}>{text}</text>)}
+  </g>
+
+  <g class="lf-runs">
+    {Array.from({ length: walkers }, () => (
+      <g class="lf-run" opacity="0">
+        {[0.12, 0.25, 0.45, 0.8].map((o) => (
+          <path class="lf-trail" fill="none" stroke="var(--fg)" stroke-width="1.4" stroke-dasharray="1.5 4.5" stroke-linecap="round" stroke-opacity={o} vector-effect="non-scaling-stroke" />
+        ))}
+        <circle class="lf-dot" r="4.5" fill="var(--fg)" />
+        <text class="lf-read" font-family="var(--font-mono)" font-size="12" fill="var(--fg)" stroke="var(--bg)" stroke-width="5" paint-order="stroke" />
+      </g>
+    ))}
+  </g>
+</svg>
+
+<style>
+  .loss-field { display: block; color: var(--contour); }
+  /* Random terrain: hide the server frame until the client has drawn its own, then fade in */
+  :global(html.js) .lf-random { opacity: 0; transition: opacity 1.2s ease; }
+  :global(html.js) .lf-random.lf-ready { opacity: 1; }
+  .lf-fade-left {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 35%);
+            mask-image: linear-gradient(to right, transparent, #000 35%);
+  }
+  .lf-fade-radial {
+    -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+            mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+  }
+</style>
+
+<script>
+  import { makeField, sampleGrid, applyCursor, contoursFromGrid, levelPoint, sgdStep, type Field, type Grid, type Pointer, type Walker } from '../lib/contours';
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fine = matchMedia('(pointer: fine)').matches;
+  const uk = document.documentElement.lang === 'uk';
+  const HINT = fine
+    ? (uk ? 'клікніть, щоб запустити · курсор штовхає' : 'click to start a run · move to push')
+    : (uk ? 'торкніться, щоб запустити' : 'tap to start a run');
+
+  type Run = Walker & { born: number; mode: 'run' | 'stuck' | 'done'; since: number; wasStuck: boolean; pending?: boolean; px?: number; py?: number };
+
+  document.querySelectorAll<SVGSVGElement>('svg[data-loss]').forEach((svg) => {
+    if (reduce) { svg.classList.add('lf-ready'); return; }
+    const cfg = JSON.parse(svg.dataset.loss!);
+    const host = (svg.closest('section, header') as HTMLElement) ?? svg.parentElement!;
+    const S = Math.min(cfg.w, cfg.h * 1.6);
+
+    // ---- visible area and text to keep clear of (field coordinates) ----
+    let [vx0, vx1, vy0, vy1] = cfg.view;
+    let textRects: number[][] = [];
+    const toFieldPt = (x: number, y: number) => {
+      const m = svg.getScreenCTM(); if (!m) return [x, y];
+      const q = new DOMPoint(x, y).matrixTransform(m.inverse());
+      return [q.x, q.y];
+    };
+    const inText = (x: number, y: number, pad = 0) =>
+      textRects.some(([x0, y0, x1, y1]) => x > x0 - pad && x < x1 + pad && y > y0 - pad && y < y1 + pad);
+    const measure = () => {
+      const r = svg.getBoundingClientRect(), hr = host.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const fx0 = (Math.max(hr.left, 0) - r.left) / r.width, fx1 = (Math.min(hr.right, innerWidth) - r.left) / r.width;
+      const fy0 = (hr.top - r.top) / r.height, fy1 = (hr.bottom - r.top) / r.height;
+      vx0 = Math.max(cfg.view[0], fx0 + 0.03); vx1 = Math.min(cfg.view[1], fx1 - 0.03);
+      vy0 = Math.max(cfg.view[2], fy0 + 0.03); vy1 = Math.min(cfg.view[3], fy1 - 0.03);
+      if (vx1 - vx0 < 0.1) { vx0 = cfg.view[0]; vx1 = cfg.view[1]; }
+      if (vy1 - vy0 < 0.1) { vy0 = cfg.view[2]; vy1 = cfg.view[3]; }
+      textRects = [...host.querySelectorAll<HTMLElement>('.knockout, [data-avoid]')].map((el) => {
+        const range = document.createRange(); range.selectNodeContents(el);
+        const b = el.matches('[data-avoid]') ? el.getBoundingClientRect() : range.getBoundingClientRect();
+        const [x0, y0] = toFieldPt(b.left, b.top), [x1, y1] = toFieldPt(b.right, b.bottom);
+        return [x0, y0, x1, y1];
+      });
+    };
+    measure();
+    addEventListener('resize', measure, { passive: true });
+    document.fonts?.ready.then(measure);
+    setTimeout(measure, 800);
+
+    // ---- run helpers ----
+    const clampToView = (r: Walker) => {
+      const X0 = vx0 * cfg.w, X1 = vx1 * cfg.w, Y0 = vy0 * cfg.h, Y1 = vy1 * cfg.h;
+      if (r.x < X0 || r.x > X1) { r.x = Math.min(X1, Math.max(X0, r.x)); r.vx *= -0.3; }
+      if (r.y < Y0 || r.y > Y1) { r.y = Math.min(Y1, Math.max(Y0, r.y)); r.vy *= -0.3; }
+    };
+    const nearMin = (f: Field, x: number, y: number) => Math.hypot(x - f.min.x, y - f.min.y) < S * 0.045;
+    const sampleStart = (f: Field, t: number): [number, number] => {
+      // fairly high ground (60–90th percentile) in the visible area, away from the minimum and from text
+      const c: number[][] = [];
+      for (let k = 0; k < 60; k++) {
+        const x = (vx0 + 0.04 + Math.random() * (vx1 - vx0 - 0.08)) * cfg.w;
+        const y = (vy0 + 0.04 + Math.random() * (vy1 - vy0 - 0.08)) * cfg.h;
+        if (Math.hypot(x - f.min.x, (y - f.min.y) * 1.3) < S * 0.25 || inText(x, y, 30)) continue;
+        c.push([x, y, f(x, y, t)]);
+      }
+      if (!c.length) return [vx0 * cfg.w + 30, vy0 * cfg.h + 30];
+      c.sort((a, b) => a[2] - b[2]);
+      const pick = c[Math.floor(c.length * (0.6 + Math.random() * 0.3))];
+      return [pick[0], pick[1]];
+    };
+
+    // ---- terrain: random each visit, rerolled until test descents actually reach the minimum ----
+    const chooseMin = () => {
+      const [a0, a1, b0, b1] = cfg.minBox ?? [0.2, 0.8, 0.2, 0.8];
+      const lx = [Math.max(a0, vx0 + 0.06), Math.min(a1, vx1 - 0.06)], ly = [Math.max(b0, vy0 + 0.06), Math.min(b1, vy1 - 0.06)];
+      for (let k = 0; k < 80; k++) {
+        cfg.mx = lx[0] + Math.random() * Math.max(0, lx[1] - lx[0]);
+        cfg.my = ly[0] + Math.random() * Math.max(0, ly[1] - ly[0]);
+        const av = cfg.avoid;
+        const inBox = av && cfg.mx > av[0] && cfg.mx < av[1] && cfg.my > av[2] && cfg.my < av[3];
+        if (!inBox && !inText(cfg.mx * cfg.w, cfg.my * cfg.h, 70)) break;
+      }
+    };
+    const playable = (f: Field) => {
+      let ok = 0;
+      for (let k = 0; k < 5; k++) {
+        const [x, y] = sampleStart(f, 0);
+        const w: Walker = { x, y, vx: 0, vy: 0, pts: [], still: 0, rest: 0, step: 0 };
+        for (let i = 0; i < 1200; i++) { sgdStep(f, w, 0, 1); w.pts.length = 0; clampToView(w); }
+        if (nearMin(f, w.x, w.y)) ok++;
+      }
+      return ok >= 2; // at least 2 of 5 test runs reach the global minimum (others may land in side valleys)
+    };
+    let field = makeField(cfg);
+    if (cfg.random) {
+      for (let attempt = 0; attempt < 12; attempt++) {
+        cfg.seed = Math.floor(Math.random() * 1e6) + 1;
+        chooseMin();
+        field = makeField(cfg);
+        if (playable(field)) break;
+      }
+    }
+
+    const levels = [...svg.querySelectorAll<SVGPathElement>('.lf-levels path')];
+    const labelEls = [...svg.querySelectorAll<SVGTextElement>('.lf-labels text')];
+    // Hint / score: plain HTML in the section's bottom-right corner (outside the SVG's fade mask)
+    const hud = document.createElement('p');
+    hud.setAttribute('aria-hidden', 'true');
+    hud.style.cssText = 'position:absolute;right:1.25rem;bottom:1rem;margin:0;font:11px/1.4 var(--font-mono);color:var(--muted);pointer-events:none;opacity:0;transition:opacity .6s;z-index:1;text-align:right';
+    host.appendChild(hud);
+    const runEls = [...svg.querySelectorAll<SVGGElement>('.lf-run')].map((g) => ({
+      g, trails: [...g.querySelectorAll<SVGPathElement>('.lf-trail')],
+      dot: g.querySelector<SVGCircleElement>('.lf-dot')!, read: g.querySelector<SVGTextElement>('.lf-read')!,
+    }));
+
+    // ---- game state ----
+    const score = { runs: 0, converged: 0, rescued: 0 };
+    let played = false, lastPush = -99;
+    const newRun = (x: number, y: number, t: number): Run =>
+      ({ x, y, vx: 0, vy: 0, pts: [[x, y]], still: 0, rest: 0, step: 0, born: t, mode: 'run', since: t, wasStuck: false });
+    const spawn = (t: number) => { score.runs++; const [x, y] = sampleStart(field, t); return newRun(x, y, t); };
+    const runs: Run[] = [];
+    for (let i = 0; i < cfg.walkers; i++) runs.push(i === 0 ? spawn(0) : { ...newRun(0, 0, 0), born: i * 3.5, pending: true });
+
+    let visible = false, raf = 0, last = 0, acc = 0;
+    const STEP = 0.04;      // optimizer: 25 steps per second, independent of frame rate
+    const BASE_DT = 0.25;   // slow terrain motion: sampled 4× per second, blended between samples
+    const CELL = 9;
+    let gA: Grid | null = null, gB: Grid | null = null, work: Grid | null = null, tA = 0, tB = 0;
+    // Terrain clock: the ambient (lava) motion runs on its own time, which eases to a stop while the
+    // cursor is interacting and eases back after, so the two effects never fight.
+    let tt = 0, flow = 1;
+    const cur = { x: 0.5, y: 0.5, s: 0 }, tgt = { x: 0.5, y: 0.5, s: 0 };
+    const wake: { x: number; y: number; s: number }[] = [];
+
+    const render = (r: Run | undefined, el: (typeof runEls)[number], t: number) => {
+      if (!r || r.pending) { el.g.setAttribute('opacity', '0'); return; }
+      const fadeOut = r.rest > 0 ? Math.max(0, 1 - (t - r.rest) / 2.5) : 1;
+      el.g.setAttribute('opacity', fadeOut.toFixed(2));
+      const pts = r.pts, chunk = Math.ceil(pts.length / 4);
+      el.trails.forEach((tr, k) => {
+        const seg = pts.slice(Math.max(0, k * chunk - 1), (k + 1) * chunk);
+        tr.setAttribute('d', seg.length > 1 ? 'M' + seg.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') : '');
+      });
+      // the optimizer steps 25×/s; between steps the dot glides (interpolated) so motion stays smooth
+      const a = Math.min(1, acc / STEP);
+      const dx = r.px === undefined || r.rest ? r.x : r.px + (r.x - r.px) * a;
+      const dy = r.py === undefined || r.rest ? r.y : r.py + (r.y - r.py) * a;
+      el.dot.setAttribute('cx', dx.toFixed(1)); el.dot.setAttribute('cy', dy.toFixed(1));
+      const loss = field.loss(field(r.x, r.y, tt)).toFixed(2);
+      const label = r.mode === 'done' ? `✓ converged · ${loss}` : r.mode === 'stuck' ? `local min · ${loss}` : `loss ${loss}`;
+      // to the right of the dot; flip left over text; hide if both sides are covered
+      const rw = label.length * 7.2, rx = dx + 10, lx = dx - 10 - rw, ty = dy - 9;
+      const hits = (x0: number) => inText(x0, ty - 6, 4) || inText(x0 + rw, ty - 6, 4) || inText(x0 + rw / 2, ty - 6, 4);
+      const right = !hits(rx), left = !hits(lx);
+      el.read.setAttribute('x', (right || !left ? rx : lx).toFixed(1)); el.read.setAttribute('y', ty.toFixed(1));
+      el.read.setAttribute('opacity', right || left ? '1' : '0');
+      el.read.setAttribute('fill', r.mode === 'done' ? 'var(--accent)' : 'var(--fg)');
+      el.read.textContent = label;
+    };
+
+    const renderHud = (t: number) => {
+      if (!played) {
+        hud.textContent = HINT;
+        hud.style.opacity = t > 2.5 ? '0.85' : '0';
+      } else {
+        hud.textContent = `runs ${score.runs} · converged ${score.converged}` + (score.rescued ? ` · rescued ${score.rescued}` : '');
+        hud.style.opacity = '0.85';
+      }
+    };
+
+    const frame = (now: number) => {
+      raf = 0;
+      if (!visible || document.hidden) { last = 0; return; }
+      const t = now / 1000;
+      const dt = last ? Math.min(0.1, (now - last) / 1000) : 1 / 60;
+      const interacting = cur.s > 0.05 && t - lastPush < 1.1;
+      flow += ((interacting ? 0 : 1) - flow) * (1 - Math.exp(-dt * (interacting ? 5 : 1.5)));
+      tt += dt * flow;
+      last = now;
+
+      // cursor follows the pointer smoothly (frame-rate independent easing)
+      const k = 1 - Math.exp(-dt * 14), ks = 1 - Math.exp(-dt * 8);
+      cur.x += (tgt.x - cur.x) * k; cur.y += (tgt.y - cur.y) * k; cur.s += (tgt.s - cur.s) * ks;
+      // wake: small bumps every ~14 field units of movement, each fading out over ~1.5 s
+      const lw = wake[wake.length - 1];
+      if (cur.s > 0.3 && (!lw || Math.hypot((cur.x - lw.x) * cfg.w, (cur.y - lw.y) * cfg.h) > 14)) {
+        wake.push({ x: cur.x, y: cur.y, s: 0.3 });
+        if (wake.length > 28) wake.shift();
+      }
+      const fade = Math.exp(-dt * 2.6);
+      for (const q of wake) q.s *= fade;
+      while (wake.length && wake[0].s < 0.02) wake.shift();
+      const bumps = [...(cur.s > 0.002 ? [{ ...cur }] : []), ...wake];
+      const p: Pointer = bumps.length ? bumps : null;
+
+      // terrain: two slow samples blended, plus the cursor layer added locally
+      if (!gA || !gB || tt - tB > BASE_DT) {
+        tA = tt; tB = tt + BASE_DT;
+        gA = sampleGrid(field, cfg.w, cfg.h, CELL, tA, gA ?? undefined);
+        gB = sampleGrid(field, cfg.w, cfg.h, CELL, tB, gB ?? undefined);
+      } else if (tt >= tB) {
+        const spare = gA; gA = gB; tA = tB; tB = tA + BASE_DT;
+        gB = sampleGrid(field, cfg.w, cfg.h, CELL, tB, spare);
+      }
+      if (!work || work.v.length !== gA.v.length) work = { ...gA, v: new Float32Array(gA.v.length) };
+      const al = Math.min(1, Math.max(0, (tt - tA) / (tB - tA)));
+      for (let i = 0; i < work.v.length; i++) work.v[i] = gA.v[i] + (gB.v[i] - gA.v[i]) * al;
+      applyCursor(field, work, p, cfg.w, cfg.h);
+      contoursFromGrid(field.levels, work).forEach((d, i) => levels[i]?.setAttribute('d', d));
+
+      if (cfg.labels) labelEls.forEach((el, k2) => {
+        const pt = levelPoint(field, field.levels[cfg.LABEL_LEVELS[k2]], cfg.LABEL_ANGLES[k2], tt, S * 0.95);
+        if (pt) { el.setAttribute('x', pt[0].toFixed(1)); el.setAttribute('y', (pt[1] + 4).toFixed(1)); }
+        el.setAttribute('opacity', pt && !inText(pt[0], pt[1], 14) ? '1' : '0');
+      });
+
+      // optimizer at a fixed rate
+      acc += dt;
+      let steps = 0;
+      while (acc >= STEP && steps < 4) {
+        acc -= STEP; steps++;
+        runs.forEach((r, i) => {
+          if (r.pending) { if (t > r.born) runs[i] = spawn(t); return; }
+          if (r.rest) { if (t - r.rest > 2.6) runs[i] = spawn(t); return; }   // faded out → next run
+          r.px = r.x; r.py = r.y;
+          sgdStep(field, r, tt, 1, p);
+          clampToView(r);
+          // settled = barely moved over the last 30 steps (noise keeps it jittering, so speed alone won't do)
+          const P = r.pts, n = P.length;
+          const moved = (m: number) => (n > m ? Math.hypot(P[n - 1][0] - P[n - 1 - m][0], P[n - 1][1] - P[n - 1 - m][1]) : Infinity);
+          const settled = moved(30) < S * 0.012;
+          const movingAgain = moved(10) > S * 0.02;
+          if (settled && nearMin(field, r.x, r.y)) {
+            r.mode = 'done'; r.rest = t; score.converged++;                    // reached the global minimum
+            if (r.wasStuck && t - lastPush < 6) score.rescued++;
+          } else if (settled && r.mode === 'run') {
+            r.mode = 'stuck'; r.since = t; r.wasStuck = true;                  // local minimum: can be pushed out
+          } else if (r.mode === 'stuck' && movingAgain) {
+            r.mode = 'run';                                                    // moving again (pushed out)
+          } else if (r.mode === 'stuck' && t - r.since > 5 && t - lastPush > 1.5) {
+            r.rest = t;                                                        // nobody helped: give up
+          } else if (r.step > 2400) r.rest = t;
+        });
+      }
+      if (acc > STEP) acc = STEP;
+      runEls.forEach((el, i) => render(runs[i], el, t));
+      renderHud(t);
+      svg.classList.add('lf-ready');
+      raf = requestAnimationFrame(frame);
+    };
+    const kick = () => { if (!raf && visible) raf = requestAnimationFrame(frame); };
+
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; kick(); }).observe(svg);
+    document.addEventListener('visibilitychange', kick);
+
+    if (cfg.interactive) {
+      const toField = (e: PointerEvent | MouseEvent) => {
+        const [x, y] = toFieldPt(e.clientX, e.clientY);
+        return { x, y };
+      };
+      if (fine) {
+        host.addEventListener('pointermove', (e) => {
+          const q = toField(e);
+          tgt.x = q.x / cfg.w; tgt.y = q.y / cfg.h; tgt.s = 1;
+          lastPush = performance.now() / 1000;
+          if (!played && runs.some((r) => Math.hypot(r.x - q.x, r.y - q.y) < S * 0.12)) played = true;
+        });
+        host.addEventListener('pointerleave', () => { tgt.s = 0; });
+      }
+      // Click / tap empty space: restart the run from there (never more than one dot at a time)
+      host.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('a, button, input, code, pre')) return;
+        const q = toField(e);
+        const t = performance.now() / 1000;
+        runs[0] = newRun(q.x, q.y, t);
+        score.runs++; played = true;
+        kick();
+      });
+    }
+  });
+</script>

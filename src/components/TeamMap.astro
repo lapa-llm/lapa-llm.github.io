@@ -1,0 +1,102 @@
+---
+// Team map: where the team works, by affiliation (or a person's `city` override).
+// Rendered at build time: country outlines from Natural Earth (world-atlas), projected with d3-geo.
+// Visitors get a small static SVG, no map tiles and no third-party requests.
+import { geoConicConformal, geoPath, geoBounds, geoContains } from 'd3-geo';
+import { feature, merge } from 'topojson-client';
+import type { Topology, GeometryCollection, GeometryObject, Polygon, MultiPolygon } from 'topojson-specification';
+import world from 'world-atlas/countries-50m.json';
+import { cities, orgCity, type Person } from '../data/site';
+import type { Lang } from '../i18n/ui';
+
+interface Props { people: Person[]; lang: Lang; title: string; note: string }
+const { people, lang, title, note } = Astro.props;
+
+type CityKey = keyof typeof cities;
+const cityOf = (p: Person): CityKey | undefined =>
+  p.city ?? (typeof p.org === 'string' ? orgCity[p.org] : undefined);
+
+const groups = (Object.keys(cities) as CityKey[])
+  .map((k) => ({ key: k, ...cities[k], people: people.filter((p) => cityOf(p) === k) }))
+  .filter((g) => g.people.length > 0)
+  .sort((a, b) => b.people.length - a.people.length);
+
+// Frame: all of Ukraine plus the cities, with a margin for context.
+const W = 800, H = 520;
+const lons = [22, 40.3, ...groups.map((g) => g.at[0])], lats = [44.3, 52.4, ...groups.map((g) => g.at[1])];
+const frame = {
+  type: 'Feature' as const, properties: {},
+  geometry: { type: 'MultiPoint' as const, coordinates: [
+    [Math.min(...lons) - 2, Math.min(...lats) - 1], [Math.max(...lons) + 1, Math.max(...lats) + 1.5],
+  ] },
+};
+const projection = geoConicConformal().parallels([48, 57]).rotate([-20, 0]).fitExtent([[24, 24], [W - 24, H - 24]], frame);
+const path = geoPath(projection).digits(0);
+
+const topo = world as unknown as Topology<{ countries: GeometryCollection }>;
+
+// Crimea is Ukraine. Natural Earth draws it inside Russia's shape, so move that polygon into Ukraine's
+// and dissolve the line between them (topojson `merge` drops arcs the two shapes share).
+const UA = '804', RU = '643';
+const geoms = topo.objects.countries.geometries as Array<GeometryObject & { id?: string | number; arcs?: unknown }>;
+const uaGeom = geoms.find((g) => String(g.id) === UA) as GeometryObject;
+const ruGeom = geoms.find((g) => String(g.id) === RU) as MultiPolygon;
+const CRIMEA: [number, number][] = [[34.1, 44.95], [33.52, 44.6], [36.47, 45.36]]; // Simferopol, Sevastopol, Kerch
+const isCrimea = (arcs: number[][]) => {
+  const poly = feature(topo, { type: 'Polygon', arcs } as Polygon);
+  return CRIMEA.some((pt) => geoContains(poly, pt));
+};
+const crimea = ruGeom.arcs.filter(isCrimea);
+const ukraine = merge(topo, [uaGeom, ...crimea.map((arcs) => ({ type: 'Polygon', arcs }) as Polygon)] as Array<Polygon | MultiPolygon>);
+const russia = feature(topo, { type: 'MultiPolygon', arcs: ruGeom.arcs.filter((a) => !isCrimea(a)) } as MultiPolygon);
+
+const countries = feature(topo, topo.objects.countries).features
+  .map((f) => String(f.id) === UA ? { ...f, geometry: ukraine } : String(f.id) === RU ? { ...f, geometry: russia.geometry } : f)
+  .filter((f) => {
+    const [[x0, y0], [x1, y1]] = geoBounds(f);
+    return x1 > 0 && x0 < 46 && y1 > 40 && y0 < 62; // only what can be in view
+  });
+const shapes = countries.map((f) => ({ d: path(f) ?? '', ua: String(f.id) === UA }));
+
+const maxN = Math.max(...groups.map((g) => g.people.length));
+const dots = groups.map((g) => {
+  const [x, y] = projection(g.at as [number, number]) ?? [0, 0];
+  const r = 5 + 9 * Math.sqrt(g.people.length / maxN);
+  const left = g.key === 'krakow'; // keeps Kraków's label clear of Lviv's dot
+  return { ...g, x, y, r, lx: left ? x - r - 10 : x + r + 10, anchor: left ? 'end' : 'start' };
+});
+---
+<div class="mt-14">
+  <h3 class="text-xl font-medium tracking-tight">{title}</h3>
+  <p class="mt-2 text-sm text-muted">{note}</p>
+  <div class="card mt-6 max-w-2xl overflow-hidden p-0">
+      <svg viewBox={`0 0 ${W} ${H}`} class="team-map block h-auto w-full" role="img" aria-label={title}>
+        <defs>
+          <clipPath id="team-map-clip"><rect width={W} height={H} /></clipPath>
+        </defs>
+        <g clip-path="url(#team-map-clip)" stroke-linejoin="round">
+          {shapes.map((s) => <path d={s.d} class:list={['country', s.ua && 'ua']} vector-effect="non-scaling-stroke" />)}
+        </g>
+        {dots.map((d) => (
+          <g class="city" data-city={d.key}>
+            <title>{d.name[lang]}: {d.people.map((p) => p.name[lang]).join(', ')}</title>
+            <circle cx={d.x} cy={d.y} r={d.r + 6} class="halo" />
+            <circle cx={d.x} cy={d.y} r={d.r} class="dot" />
+            <text x={d.lx} y={d.y + 7} text-anchor={d.anchor} class="label">{d.name[lang]} · {d.people.length}</text>
+          </g>
+        ))}
+      </svg>
+  </div>
+</div>
+
+<style>
+  .team-map { background: var(--surface); }
+  .team-map .country { fill: none; stroke: var(--contour); stroke-opacity: 0.35; stroke-width: 1; }
+  .team-map .country.ua { fill: var(--accent-soft); stroke-opacity: 0.7; }
+  .team-map .dot { fill: var(--accent); }
+  .team-map .halo { fill: var(--accent); fill-opacity: 0.15; }
+  .team-map .label {
+    fill: var(--fg); font-family: var(--font-mono, ui-monospace, monospace); font-size: 22px;
+    paint-order: stroke; stroke: var(--surface); stroke-width: 6px; stroke-linejoin: round;
+  }
+</style>

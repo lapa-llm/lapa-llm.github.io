@@ -1,0 +1,8 @@
+---
+interface Props { target: string; label: string; done: string }
+const { target, label, done } = Astro.props;
+---
+<button type="button" data-copy={target} data-label={label} data-done={done}
+  class="copy-btn text-xs font-medium px-2.5 py-1 rounded-md border border-white/15 text-white/80 hover:text-white hover:border-white/40 transition-colors">
+  {label}
+</button>

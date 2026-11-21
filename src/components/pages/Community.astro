@@ -1,0 +1,67 @@
+---
+import Base from '../../layouts/Base.astro';
+import PageHeader from '../PageHeader.astro';
+import SectionTitle from '../SectionTitle.astro';
+import Ext from '../Ext.astro';
+import { ui, type Lang } from '../../i18n/ui';
+import { links, communityModels } from '../../data/site';
+
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = ui[lang];
+const c = t.community;
+---
+<Base lang={lang} page="community" title={t.nav.community}>
+  <PageHeader title={c.title} lead={c.lead} />
+
+  <section class="container-x grid gap-6 lg:grid-cols-[3fr_2fr]">
+    <article class="card p-6 sm:p-8">
+      <p class="eyebrow">Hackathon · 2026</p>
+      <h2 class="mt-2 text-2xl font-medium tracking-tight">{c.lapathonTitle}</h2>
+      <p class="mt-3 text-muted leading-relaxed">{c.lapathon}</p>
+      <ul class="mt-6 grid gap-3 sm:grid-cols-3">
+        {c.tracks.map((tr) => (
+          <li class="rounded-xl bg-sunken p-4">
+            <p class="font-medium">{tr.t}</p>
+            <p class="mt-1 text-sm text-muted">{tr.d}</p>
+          </li>
+        ))}
+      </ul>
+      <p class="mt-5 text-sm text-muted">{c.lapathonPartners}</p>
+      <a class="mt-4 inline-flex link text-sm font-medium" href={links.aiMeetups}>AI Meetups <Ext /></a>
+    </article>
+
+    <article class="card p-6 sm:p-8 flex flex-col">
+      <p class="eyebrow">API</p>
+      <h2 class="mt-2 text-2xl font-medium tracking-tight">{c.lapathoniiaTitle}</h2>
+      <p class="mt-3 text-muted leading-relaxed flex-1">{c.lapathoniia}</p>
+      <a href={links.lapathoniia} class="mt-6 inline-flex w-fit items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-sm font-medium hover:border-accent">lapathoniia.top <Ext /></a>
+    </article>
+  </section>
+
+  <section class="container-x mt-20">
+    <SectionTitle index="01" title={c.builtTitle} />
+    <div class="grid gap-3 sm:grid-cols-3">
+      {communityModels.map((m) => (
+        <a href={m.url} class="card p-5">
+          <p class="font-mono text-sm font-medium break-all">{m.name} <Ext /></p>
+          <p class="mt-1.5 text-sm text-muted">{m.desc[lang]}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="container-x mt-20">
+    <div class="rounded-2xl bg-accent-soft p-8 sm:p-12 grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
+      <div>
+        <h2 class="text-2xl font-medium tracking-tight">{c.contributeTitle}</h2>
+        <p class="mt-2 max-w-xl text-muted leading-relaxed">{c.contribute}</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a href={`${links.repo}/issues`} class="rounded-xl btn-primary px-5 py-3 font-medium">{t.cta.github}</a>
+        <a href={links.x} class="rounded-xl border border-line bg-surface px-5 py-3 font-medium hover:border-accent">X</a>
+        <a href={links.telegram} class="rounded-xl border border-line bg-surface px-5 py-3 font-medium hover:border-accent">{c.telegram}</a>
+      </div>
+    </div>
+  </section>
+</Base>

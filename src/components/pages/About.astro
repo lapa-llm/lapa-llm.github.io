@@ -1,0 +1,49 @@
+---
+import Base from '../../layouts/Base.astro';
+import PageHeader from '../PageHeader.astro';
+import SectionTitle from '../SectionTitle.astro';
+import TeamCard from '../TeamCard.astro';
+import TeamMap from '../TeamMap.astro';
+import { ui, type Lang } from '../../i18n/ui';
+import { links, team } from '../../data/site';
+
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = ui[lang];
+const a = t.about;
+// The "Where we are" map is hidden for now; set to true to bring it back.
+const SHOW_MAP = false;
+---
+<Base lang={lang} page="about" title={t.nav.about}>
+  <PageHeader title={a.title} lead={a.lead} />
+
+  <section class="container-x">
+    <div class="card p-6 sm:p-10">
+      <div>
+        <h2 class="text-2xl font-medium tracking-tight">{a.nameTitle}</h2>
+        <p class="mt-3 max-w-3xl text-lg leading-relaxed">{a.name}</p>
+        <p class="mt-4 text-sm text-muted">
+          {a.nameSource}: <a class="link" href={links.lapaWiki} hreflang="uk">{lang === 'uk' ? 'Вікіпедія' : 'Wikipedia (in Ukrainian)'}</a> · <a class="link" href={links.gmdhSource}>J. Schmidhuber, “Deep Learning in Neural Networks”</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="container-x mt-20">
+    <SectionTitle index="01" title={a.teamTitle} lead={a.teamNote} />
+    <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {team.filter((p) => !p.hidden).map((p) => <TeamCard p={p} lang={lang} pastLabel={a.teamPast} />)}
+    </ul>
+    {SHOW_MAP && <TeamMap people={team.filter((p) => !p.hidden)} lang={lang} title={a.mapTitle} note={a.mapNote} />}
+  </section>
+
+  <section class="container-x mt-20">
+    <SectionTitle index="02" title={a.contactTitle} />
+    <div class="flex flex-wrap gap-3">
+      <a href={links.github} class="rounded-xl border border-line bg-surface px-5 py-3 font-medium hover:border-accent">GitHub</a>
+      <a href={links.hf} class="rounded-xl border border-line bg-surface px-5 py-3 font-medium hover:border-accent">Hugging Face</a>
+      <a href={links.x} class="rounded-xl border border-line bg-surface px-5 py-3 font-medium hover:border-accent">X</a>
+      <a href={links.telegram} class="rounded-xl border border-line bg-surface px-5 py-3 font-medium hover:border-accent">Telegram</a>
+    </div>
+  </section>
+</Base>

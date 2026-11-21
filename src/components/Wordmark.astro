@@ -1,0 +1,19 @@
+---
+// "LAPA / LANGUAGE MODEL" lockup.
+interface Props { size?: 'sm' | 'lg'; class?: string }
+const { size = 'sm', class: cls = '' } = Astro.props;
+---
+<span class:list={['wordmark inline-flex flex-col items-center leading-none', size, cls]} lang="en">
+  <span class="wm-name">Lapa</span>
+  <span class="wm-sub">Language Model</span>
+</span>
+
+<style>
+  .wordmark { font-family: var(--font-display); text-transform: uppercase; color: var(--brand); }
+  .wm-name { font-weight: 700; letter-spacing: .04em; }
+  .wm-sub { font-weight: 500; letter-spacing: .2em; margin-top: .3em; padding-left: .2em; }
+  .sm .wm-name { font-size: 1.15rem; }
+  .sm .wm-sub { font-size: .56rem; }
+  .lg .wm-name { font-size: clamp(3rem, 9vw, 5.5rem); }
+  .lg .wm-sub { font-size: clamp(.8rem, 1.9vw, 1.15rem); letter-spacing: .3em; padding-left: .3em; }
+</style>

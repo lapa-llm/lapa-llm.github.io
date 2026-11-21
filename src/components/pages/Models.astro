@@ -1,0 +1,97 @@
+---
+import Base from '../../layouts/Base.astro';
+import PageHeader from '../PageHeader.astro';
+import SectionTitle from '../SectionTitle.astro';
+import Ext from '../Ext.astro';
+import { ui, type Lang } from '../../i18n/ui';
+import { links, models, classifiers, datasets, spaces } from '../../data/site';
+
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = ui[lang];
+const m = t.models;
+---
+<Base lang={lang} page="models" title={t.nav.models}>
+  <PageHeader title={m.title} lead={m.lead} />
+
+  <section class="container-x">
+    <div class="grid gap-8 lg:grid-cols-[1fr_20rem]">
+      <div>
+        <h2 class="text-2xl font-medium tracking-tight mb-5">{m.llmTitle}</h2>
+        <div class="grid gap-3">
+          {models.map((x) => (
+            <a href={x.url} class="card p-5 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <code class="font-mono text-[0.95rem] font-medium break-all">lapa-llm/{x.id}</code>
+                  {x.latest && <span class="rounded-full bg-sun/20 px-2 py-0.5 text-xs font-medium text-fg">{m.latest}</span>}
+                </div>
+                <p class="mt-1.5 text-sm text-muted">{x.desc[lang]}</p>
+              </div>
+              <span class="text-xs font-medium text-accent sm:text-right whitespace-nowrap">{x.tag[lang]} <Ext /></span>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <aside class="card p-6 h-fit lg:sticky lg:top-24">
+        <h2 class="font-medium">{m.specsTitle}</h2>
+        <dl class="mt-4 divide-y divide-line text-sm">
+          {m.specs.map(([k, v]) => (
+            <div class="py-2.5 grid grid-cols-[6.5rem_1fr] gap-3">
+              <dt class="text-muted">{k}</dt><dd class="font-medium">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <h3 class="mt-6 text-sm font-medium">{m.collections}</h3>
+        <ul class="mt-2 space-y-1.5 text-sm">
+          <li><a class="link" href={links.collection}>{m.releaseCol}</a></li>
+          <li><a class="link" href={links.pretrainData}>{m.pretrainCol}</a></li>
+        </ul>
+      </aside>
+    </div>
+  </section>
+
+  <section class="container-x mt-20">
+    <SectionTitle index="01" id="classifiers" title={m.classifiersTitle} lead={m.classifiersLead} />
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {classifiers.map((c) => (
+        <a href={c.url} class="card p-5">
+          <p class="font-medium">{c.desc[lang]}</p>
+          <code class="mt-1.5 block font-mono text-xs text-muted break-all">{c.id}</code>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="container-x mt-20">
+    <SectionTitle index="02" id="datasets" title={m.datasetsTitle} lead={m.datasetsLead} />
+    <div class="card overflow-hidden">
+      <table class="w-full text-sm">
+        <tbody class="divide-y divide-line">
+          {datasets.map((d) => (
+            <tr class="hover:bg-sunken transition-colors">
+              <td class="px-5 py-3.5">
+                <a href={d.url} class="font-mono font-medium hover:text-accent break-all">{d.id}</a>
+              </td>
+              <td class="px-3 py-3.5 text-muted hidden sm:table-cell">{d.kind[lang]}</td>
+              <td class="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">{d.rows} <span class="text-muted">{m.rows}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="container-x mt-20">
+    <SectionTitle index="03" title={m.spacesTitle} />
+    <div class="grid gap-3 sm:grid-cols-3">
+      {spaces.map((s) => (
+        <a href={s.url} class="card p-5">
+          <p class="font-medium">{s.name} <Ext /></p>
+          <p class="mt-1.5 text-sm text-muted">{s.desc[lang]}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</Base>

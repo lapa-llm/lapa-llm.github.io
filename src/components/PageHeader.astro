@@ -1,0 +1,33 @@
+---
+// Page header with a loss landscape on the right.
+// Default: tracked-caps title. With `eyebrow`, it's a paper header (venue, normal-case title, authors, slot for links).
+import ContourField from './ContourField.astro';
+interface Props { title: string; lead?: string; seed?: number; eyebrow?: string; meta?: string; back?: { href: string; label: string } }
+const { title, lead, eyebrow, meta, back } = Astro.props;
+const seed = Astro.props.seed ?? [...title].reduce((a, c) => a + c.charCodeAt(0), 0) % 97 + 3;
+---
+<header class="relative overflow-hidden border-b border-line">
+  <div class="absolute inset-y-0 right-0 w-full opacity-40 md:w-[68%] md:opacity-100">
+    <ContourField
+      seed={seed} w={1200} h={420} mx={0.7} my={0.52} view={[0.42, 0.94, 0.1, 0.9]}
+      walkers={1} labels interactive lava fade="left"
+      random minBox={[0.56, 0.86, 0.3, 0.7]}
+      class="h-full w-full"
+    />
+  </div>
+  <div class="container-x relative pt-14 pb-14 sm:pt-20 sm:pb-20">
+    {back && <a href={back.href} class="knockout mb-8 inline-block font-mono text-xs text-muted hover:text-accent">← {back.label}</a>}
+    {eyebrow ? (
+      <>
+        <p class="knockout eyebrow">{eyebrow}</p>
+        <h1 class="knockout mt-4 max-w-3xl text-3xl sm:text-5xl font-medium tracking-tight leading-[1.1]">{title}</h1>
+        {meta && <p class="knockout mt-4 max-w-2xl text-muted">{meta}</p>}
+      </>
+    ) : (
+      <h1 class="knockout tracked text-3xl sm:text-5xl font-normal">{title}</h1>
+    )}
+    {lead && <p class="knockout mt-5 max-w-xl text-lg text-muted leading-relaxed">{lead}</p>}
+    <div class="relative mt-8 flex w-fit flex-wrap gap-3 empty:hidden" data-avoid><slot /></div>
+  </div>
+</header>
+<div class="h-12 sm:h-16"></div>
