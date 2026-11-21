@@ -11,8 +11,6 @@ interface Props { lang: Lang }
 const { lang } = Astro.props;
 const t = ui[lang];
 const a = t.about;
-// The "Where we are" map is hidden for now; set to true to bring it back.
-const SHOW_MAP = false;
 ---
 <Base lang={lang} page="about" title={t.nav.about}>
   <PageHeader title={a.title} lead={a.lead} />
@@ -34,7 +32,7 @@ const SHOW_MAP = false;
     <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {team.filter((p) => !p.hidden).map((p) => <TeamCard p={p} lang={lang} pastLabel={a.teamPast} />)}
     </ul>
-    {SHOW_MAP && <TeamMap people={team.filter((p) => !p.hidden)} lang={lang} title={a.mapTitle} note={a.mapNote} />}
+    <TeamMap people={team.filter((p) => !p.hidden)} lang={lang} title={a.mapTitle} />
   </section>
 
   <section class="container-x mt-20">

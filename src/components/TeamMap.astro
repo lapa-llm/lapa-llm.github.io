@@ -9,8 +9,8 @@ import world from 'world-atlas/countries-50m.json';
 import { cities, orgCity, type Person } from '../data/site';
 import type { Lang } from '../i18n/ui';
 
-interface Props { people: Person[]; lang: Lang; title: string; note: string }
-const { people, lang, title, note } = Astro.props;
+interface Props { people: Person[]; lang: Lang; title: string }
+const { people, lang, title } = Astro.props;
 
 type CityKey = keyof typeof cities;
 const cityOf = (p: Person): CityKey | undefined =>
@@ -58,17 +58,15 @@ const countries = feature(topo, topo.objects.countries).features
   });
 const shapes = countries.map((f) => ({ d: path(f) ?? '', ua: String(f.id) === UA }));
 
-const maxN = Math.max(...groups.map((g) => g.people.length));
 const dots = groups.map((g) => {
   const [x, y] = projection(g.at as [number, number]) ?? [0, 0];
-  const r = 5 + 9 * Math.sqrt(g.people.length / maxN);
+  const r = 8;
   const left = g.key === 'krakow'; // keeps Kraków's label clear of Lviv's dot
   return { ...g, x, y, r, lx: left ? x - r - 10 : x + r + 10, anchor: left ? 'end' : 'start' };
 });
 ---
 <div class="mt-14">
   <h3 class="text-xl font-medium tracking-tight">{title}</h3>
-  <p class="mt-2 text-sm text-muted">{note}</p>
   <div class="card mt-6 max-w-2xl overflow-hidden p-0">
       <svg viewBox={`0 0 ${W} ${H}`} class="team-map block h-auto w-full" role="img" aria-label={title}>
         <defs>
@@ -82,7 +80,7 @@ const dots = groups.map((g) => {
             <title>{d.name[lang]}: {d.people.map((p) => p.name[lang]).join(', ')}</title>
             <circle cx={d.x} cy={d.y} r={d.r + 6} class="halo" />
             <circle cx={d.x} cy={d.y} r={d.r} class="dot" />
-            <text x={d.lx} y={d.y + 7} text-anchor={d.anchor} class="label">{d.name[lang]} · {d.people.length}</text>
+            <text x={d.lx} y={d.y + 7} text-anchor={d.anchor} class="label">{d.name[lang]}</text>
           </g>
         ))}
       </svg>
